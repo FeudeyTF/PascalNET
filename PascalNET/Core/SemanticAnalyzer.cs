@@ -5,6 +5,7 @@ using PascalNET.Core.AST.Expressions;
 using PascalNET.Core.AST.Nodes;
 using PascalNET.Core.AST.Statements;
 using PascalNET.Core.Messages;
+using PascalNET.Core.Parser;
 
 namespace PascalNET.Core
 {
@@ -21,6 +22,8 @@ namespace PascalNET.Core
 
         private readonly IMessageFormatter _messageFormatter;
 
+        private PositionTracker _positionTracker;
+
         public SemanticAnalyzer(IMessageFormatter messageFormatter)
         {
             _messageFormatter = messageFormatter;
@@ -28,6 +31,7 @@ namespace PascalNET.Core
             [
                 new Dictionary<string, VariableInfo>(StringComparer.OrdinalIgnoreCase)
             ];
+            _positionTracker = new();
             _functions = new Dictionary<string, FunctionInfo>(StringComparer.OrdinalIgnoreCase);
         }
 
@@ -378,14 +382,17 @@ namespace PascalNET.Core
             }
         }
 
-        public void AnalyzeProgram(ExecutionNode programNode)
+        public void AnalyzeProgram(ExecutionNode programNode, PositionTracker tracker)
         {
             if (programNode == null)
                 return;
 
+            _positionTracker = tracker;
+
             foreach (var declaration in programNode.Declarations)
             {
-                AnalyzeDeclaration(declaration);
+                var position = tracker.GetPosition(declaration);
+                AnalyzeDeclaration(declaration, position.Line, position.Column);
             }
 
             if (programNode.Statement != null)
@@ -398,18 +405,18 @@ namespace PascalNET.Core
             CheckUnusedFunctions();
         }
 
-        private void AnalyzeDeclaration(IDeclaration declaration)
+        private void AnalyzeDeclaration(IDeclaration declaration, int line, int column)
         {
             if (declaration is VariableDeclaration varDecl)
             {
                 foreach (var varName in varDecl.Identifiers)
                 {
-                    DeclareVariable(varName, varDecl.TypeName, 0, 0);
+                    DeclareVariable(varName, varDecl.TypeName, line, column);
                 }
             }
             else if (declaration is FunctionDeclaration funcDecl)
             {
-                DeclareFunction(funcDecl.Name, funcDecl.Parameters, funcDecl.ReturnType, 0, 0);
+                DeclareFunction(funcDecl.Name, funcDecl.Parameters, funcDecl.ReturnType, line, column);
 
                 EnterScope();
 
@@ -417,12 +424,12 @@ namespace PascalNET.Core
                 {
                     foreach (var param in funcDecl.Parameters)
                     {
-                        DeclareVariable(param.Name, param.TypeName, 0, 0);
+                        DeclareVariable(param.Name, param.TypeName, line, column);
                     }
 
                     foreach (var localDecl in funcDecl.LocalDeclarations)
                     {
-                        AnalyzeDeclaration(localDecl);
+                        AnalyzeDeclaration(localDecl, line, column);
                     }
 
                     AnalyzeStatement(funcDecl.Body);
@@ -461,19 +468,16 @@ namespace PascalNET.Core
             var expressionType = AnalyzeExpression(assignment.Expression);
             if (expressionType != null)
             {
-                CheckAssignment(assignment.Variable, expressionType, 0, 0);
+                var position = _positionTracker.GetPosition(assignment);
+                CheckAssignment(assignment.Variable, expressionType, position.Line, position.Column);
             }
         }
 
         private void AnalyzeCompoundStatement(CompoundStatement compound)
         {
             EnterScope();
-
             foreach (var statement in compound.Statements)
-            {
                 AnalyzeStatement(statement);
-            }
-
             ExitScope();
         }
 
@@ -482,9 +486,10 @@ namespace PascalNET.Core
             var conditionType = AnalyzeExpression(condition.Condition);
             if (conditionType != null && conditionType != "boolean")
             {
+                var position = _positionTracker.GetPosition(condition);
                 _messageFormatter.ReportTypeError(
                     $"Условие должно иметь тип boolean, получен {conditionType}",
-                    0, 0,
+                    position.Line, position.Column,
                     "Используйте логическое выражение в условии"
                 );
             }
@@ -502,9 +507,10 @@ namespace PascalNET.Core
             var conditionType = AnalyzeExpression(cycle.Condition);
             if (conditionType != null && conditionType != "boolean")
             {
+                var position = _positionTracker.GetPosition(cycle);
                 _messageFormatter.ReportTypeError(
                     $"Условие цикла должно иметь тип boolean, получен {conditionType}",
-                    0, 0,
+                    position.Line, position.Column,
                     "Используйте логическое выражение в условии цикла"
                 );
             }
@@ -513,7 +519,6 @@ namespace PascalNET.Core
 
         private void AnalyzeProcedureCall(ProcedureCallStatement procedureCall)
         {
-            // Анализируем аргументы процедуры
             List<string> argumentTypes = [];
             foreach (var argument in procedureCall.Arguments)
             {
@@ -524,15 +529,14 @@ namespace PascalNET.Core
                 }
             }
 
-            // Используем процедуру и проверяем её объявление
-            var function = UseFunction(procedureCall.Name, argumentTypes, 0, 0);
+            var position = _positionTracker.GetPosition(procedureCall);
+            var function = UseFunction(procedureCall.Name, argumentTypes, position.Line, position.Column);
 
-            // Проверяем, что это действительно процедура, а не функция
             if (function != null && !function.IsProcedure)
             {
                 _messageFormatter.ReportSemanticError(
                     $"'{procedureCall.Name}' является функцией, а не процедурой. Используйте её в выражении",
-                    0, 0,
+                    position.Line, position.Column,
                     "Функции должны использоваться в выражениях, а процедуры - как отдельные операторы"
                 );
             }
@@ -540,50 +544,51 @@ namespace PascalNET.Core
 
         private string? AnalyzeExpression(IExpression expression)
         {
+            var position = _positionTracker.GetPosition(expression);
             return expression switch
             {
-                Identifier identifier => AnalyzeIdentifier(identifier),
+                Identifier identifier => AnalyzeIdentifier(identifier, position.Line, position.Column),
                 IntegerLiteral _ => "integer",
                 RealLiteral _ => "real",
                 StringLiteral _ => "string",
-                BinaryOperation binary => AnalyzeBinaryOperation(binary),
-                UnaryOperation unary => AnalyzeUnaryOperation(unary),
-                FunctionCall functionCall => AnalyzeFunctionCall(functionCall),
+                BinaryOperation binary => AnalyzeBinaryOperation(binary, position.Line, position.Column),
+                UnaryOperation unary => AnalyzeUnaryOperation(unary, position.Line, position.Column),
+                FunctionCall functionCall => AnalyzeFunctionCall(functionCall, position.Line, position.Column),
                 _ => null
             };
         }
-        private string? AnalyzeIdentifier(Identifier identifier)
+
+        private string? AnalyzeIdentifier(Identifier identifier, int line, int column)
         {
-            var variable = UseVariable(identifier.Name, 0, 0);
+            var variable = UseVariable(identifier.Name, line, column);
             return variable?.Type;
         }
 
-        private string? AnalyzeBinaryOperation(BinaryOperation binary)
+        private string? AnalyzeBinaryOperation(BinaryOperation binary, int line, int column)
         {
             var leftType = AnalyzeExpression(binary.Left);
             var rightType = AnalyzeExpression(binary.Right);
 
             if (leftType != null && rightType != null)
             {
-                return CheckBinaryOperation(leftType, binary.Operator, rightType, 0, 0);
+                return CheckBinaryOperation(leftType, binary.Operator, rightType, line, column);
             }
 
             return null;
         }
 
-        private string? AnalyzeUnaryOperation(UnaryOperation unary)
+        private string? AnalyzeUnaryOperation(UnaryOperation unary, int line, int column)
         {
             var operandType = AnalyzeExpression(unary.Operand);
 
             if (operandType != null)
             {
-                return CheckUnaryOperation(unary.Operator, operandType, 0, 0);
+                return CheckUnaryOperation(unary.Operator, operandType, line, column);
             }
 
             return null;
         }
-
-        private string? AnalyzeFunctionCall(FunctionCall functionCall)
+        private string? AnalyzeFunctionCall(FunctionCall functionCall, int line, int column)
         {
             List<string> argumentTypes = [];
             foreach (var argument in functionCall.Arguments)
@@ -595,7 +600,7 @@ namespace PascalNET.Core
                 }
             }
 
-            return UseFunction(functionCall.Name, argumentTypes, 0, 0)?.ReturnType;
+            return UseFunction(functionCall.Name, argumentTypes, line, column)?.ReturnType;
         }
 
         private void CheckUnusedVariablesInScope(Dictionary<string, VariableInfo> scope)

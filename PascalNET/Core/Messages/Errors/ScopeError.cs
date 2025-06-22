@@ -1,6 +1,4 @@
-﻿using PascalNET.Core.Messages;
-
-namespace PascalNET.Core.Messages.Errors
+﻿namespace PascalNET.Core.Messages.Errors
 {
     internal class ScopeError : CompilerError
     {

@@ -11,6 +11,8 @@ namespace PascalNET.Core.Parser
 {
     internal class Parser
     {
+        public PositionTracker PositionTracker { get; init; }
+
         private readonly List<Token> _tokens;
 
         private readonly IMessageFormatter _messageFormatter;
@@ -23,6 +25,7 @@ namespace PascalNET.Core.Parser
 
         public Parser(List<Token> tokens, IMessageFormatter messageFormatter)
         {
+            PositionTracker = new();
             _tokens = tokens;
             _messageFormatter = messageFormatter;
             _position = 0;
@@ -75,6 +78,15 @@ namespace PascalNET.Core.Parser
                 _panicMode = true;
                 return null;
             }
+        }
+
+        private T TrackPosition<T>(T node, Token? token) where T : INode
+        {
+            if (token != null)
+            {
+                PositionTracker.AddPosition(node, token.Line, token.Column);
+            }
+            return node;
         }
 
         private string GetTokenDescription(TokenType tokenType)
@@ -153,10 +165,12 @@ namespace PascalNET.Core.Parser
             if (Match(TokenType.Semicolon))
                 Move();
         }
+
         public ExecutionNode? ParseProgram()
         {
             try
             {
+                var startToken = _currentToken ?? new Token(TokenType.Program, "program", 1, 1);
                 ProgramDeclaration? programDeclaration = null;
                 List<IDeclaration> declarations = [];
                 IStatement? mainStatement = null;
@@ -198,7 +212,8 @@ namespace PascalNET.Core.Parser
                     Consume(TokenType.Dot, "Ожидается '.' в конце программы");
                 }
 
-                return new ExecutionNode(declarations, mainStatement ?? new CompoundStatement([]), programDeclaration);
+                var executionNode = new ExecutionNode(declarations, mainStatement ?? new CompoundStatement([]), programDeclaration);
+                return TrackPosition(executionNode, startToken);
             }
             catch (Exception ex)
             {
@@ -248,7 +263,8 @@ namespace PascalNET.Core.Parser
             List<string> identifiers = [];
 
             var firstIdentifier = Consume(TokenType.Identifier, "Ожидается имя переменной");
-            if (firstIdentifier == null) return null;
+            if (firstIdentifier == null)
+                return null;
 
             identifiers.Add(firstIdentifier.Value);
 
@@ -256,14 +272,16 @@ namespace PascalNET.Core.Parser
             {
                 Move();
                 var identifier = Consume(TokenType.Identifier, "Ожидается имя переменной после ','");
-                if (identifier == null) break;
+                if (identifier == null)
+                    break;
                 identifiers.Add(identifier.Value);
             }
 
             if (Consume(TokenType.Colon, "Ожидается ':' после списка переменных") == null)
                 return null;
             var typeToken = ParseTypeToken();
-            if (typeToken == null) return null;
+            if (typeToken == null)
+                return null;
 
             string typeName = typeToken.Value;
 
@@ -276,10 +294,9 @@ namespace PascalNET.Core.Parser
                     "Используйте один из стандартных типов: integer, real, boolean, string"
                 );
             }
-
             Consume(TokenType.Semicolon, "Ожидается ';' после объявления переменной");
 
-            return new VariableDeclaration(identifiers, typeName);
+            return TrackPosition(new VariableDeclaration(identifiers, typeName), firstIdentifier);
         }
 
         private bool IsValidType(string typeName)
@@ -323,12 +340,12 @@ namespace PascalNET.Core.Parser
 
         private CompoundStatement? ParseCompoundStatement()
         {
+            var beginToken = _currentToken;
             if (Consume(TokenType.Begin) == null)
                 return null;
 
-            var statements = new List<IStatement>();
+            List<IStatement> statements = [];
 
-            // Парсинг операторов до 'end'
             while (!Match(TokenType.End) && _currentToken?.Type != TokenType.Eof)
             {
                 if (_panicMode)
@@ -364,7 +381,7 @@ namespace PascalNET.Core.Parser
 
             Consume(TokenType.End, "Ожидается 'end' для закрытия блока");
 
-            return new CompoundStatement(statements);
+            return TrackPosition(new CompoundStatement(statements), beginToken);
         }
 
         private IStatement? ParseIdentifierStatement()
@@ -375,13 +392,11 @@ namespace PascalNET.Core.Parser
 
             if (Match(TokenType.Assign))
             {
-                Move();
-
-                var expression = ParseExpression();
+                Move(); var expression = ParseExpression();
                 if (expression == null)
                     return null;
 
-                return new AssignmentStatement(identifierToken.Value, expression);
+                return TrackPosition(new AssignmentStatement(identifierToken.Value, expression), identifierToken);
             }
             else if (Match(TokenType.LeftParen))
             {
@@ -409,9 +424,8 @@ namespace PascalNET.Core.Parser
                         }
                     } while (!Match(TokenType.RightParen) && _currentToken != null);
                 }
-
                 Consume(TokenType.RightParen, "Ожидается ')' после аргументов процедуры");
-                return new ProcedureCallStatement(identifierToken.Value, arguments);
+                return TrackPosition(new ProcedureCallStatement(identifierToken.Value, arguments), identifierToken);
             }
             else
             {
@@ -426,6 +440,7 @@ namespace PascalNET.Core.Parser
 
         private ConditionStatement? ParseIfStatement()
         {
+            var ifToken = _currentToken;
             if (Consume(TokenType.If) == null)
                 return null;
 
@@ -447,11 +462,12 @@ namespace PascalNET.Core.Parser
                 elseStatement = ParseStatement();
             }
 
-            return new ConditionStatement(condition, thenStatement, elseStatement!);
+            return TrackPosition(new ConditionStatement(condition, thenStatement, elseStatement!), ifToken);
         }
 
         private CycleStatement? ParseWhileStatement()
         {
+            var whileToken = _currentToken;
             if (Consume(TokenType.While) == null)
                 return null;
 
@@ -466,7 +482,7 @@ namespace PascalNET.Core.Parser
             if (body == null)
                 return null;
 
-            return new CycleStatement(condition, body);
+            return TrackPosition(new CycleStatement(condition, body), whileToken);
         }
 
         private IExpression? ParseExpression()
@@ -487,7 +503,7 @@ namespace PascalNET.Core.Parser
                 var right = ParseAndExpression();
                 if (right == null)
                     break;
-                left = new BinaryOperation(left, operatorToken!.Value, right);
+                left = TrackPosition(new BinaryOperation(left, operatorToken!.Value, right), operatorToken);
             }
 
             return left;
@@ -506,7 +522,7 @@ namespace PascalNET.Core.Parser
                 var right = ParseEqualityExpression();
                 if (right == null)
                     break;
-                left = new BinaryOperation(left, operatorToken!.Value, right);
+                left = TrackPosition(new BinaryOperation(left, operatorToken!.Value, right), operatorToken);
             }
 
             return left;
@@ -525,7 +541,7 @@ namespace PascalNET.Core.Parser
                 var right = ParseRelationalExpression();
                 if (right == null)
                     break;
-                left = new BinaryOperation(left, operatorToken!.Value, right);
+                left = TrackPosition(new BinaryOperation(left, operatorToken!.Value, right), operatorToken);
             }
 
             return left;
@@ -534,8 +550,8 @@ namespace PascalNET.Core.Parser
         private IExpression? ParseRelationalExpression()
         {
             var left = ParseAdditiveExpression();
-            if (left == null) return
-                    null;
+            if (left == null)
+                return null;
 
             while (Match(TokenType.Less, TokenType.LessEqual, TokenType.Greater, TokenType.GreaterEqual))
             {
@@ -544,7 +560,7 @@ namespace PascalNET.Core.Parser
                 var right = ParseAdditiveExpression();
                 if (right == null)
                     break;
-                left = new BinaryOperation(left, operatorToken!.Value, right);
+                left = TrackPosition(new BinaryOperation(left, operatorToken!.Value, right), operatorToken);
             }
 
             return left;
@@ -563,7 +579,7 @@ namespace PascalNET.Core.Parser
                 var right = ParseMultiplicativeExpression();
                 if (right == null)
                     break;
-                left = new BinaryOperation(left, operatorToken!.Value, right);
+                left = TrackPosition(new BinaryOperation(left, operatorToken!.Value, right), operatorToken);
             }
 
             return left;
@@ -582,7 +598,7 @@ namespace PascalNET.Core.Parser
                 var right = ParseUnaryExpression();
                 if (right == null)
                     break;
-                left = new BinaryOperation(left, operatorToken!.Value, right);
+                left = TrackPosition(new BinaryOperation(left, operatorToken!.Value, right), operatorToken);
             }
 
             return left;
@@ -597,11 +613,12 @@ namespace PascalNET.Core.Parser
                 var operand = ParseUnaryExpression();
                 if (operand == null)
                     return null;
-                return new UnaryOperation(operatorToken!.Value, operand);
+                return TrackPosition(new UnaryOperation(operatorToken!.Value, operand), operatorToken);
             }
 
             return ParsePrimaryExpression();
         }
+
         private IExpression? ParsePrimaryExpression()
         {
             if (_currentToken == null)
@@ -613,16 +630,14 @@ namespace PascalNET.Core.Parser
             {
                 case TokenType.IntegerLiteral:
                     Move();
-                    return new IntegerLiteral(int.Parse(token.Value));
-
+                    return TrackPosition(new IntegerLiteral(int.Parse(token.Value)), token);
                 case TokenType.RealLiteral:
                     Move();
-                    return new RealLiteral(double.Parse(token.Value.Replace('.', ',')));
-
+                    return TrackPosition(new RealLiteral(double.Parse(token.Value.Replace('.', ','))), token);
                 case TokenType.StringLiteral:
                     Move();
                     var stringValue = token.Value[1..^1];
-                    return new StringLiteral(stringValue);
+                    return TrackPosition(new StringLiteral(stringValue), token);
                 case TokenType.Identifier:
                     Move();
 
@@ -652,13 +667,12 @@ namespace PascalNET.Core.Parser
                                 }
                             } while (!Match(TokenType.RightParen) && _currentToken != null);
                         }
-
                         Consume(TokenType.RightParen, "Ожидается ')' после аргументов функции");
-                        return new FunctionCall(token.Value, arguments);
+                        return TrackPosition(new FunctionCall(token.Value, arguments), token);
                     }
                     else
                     {
-                        return new Identifier(token.Value);
+                        return TrackPosition(new Identifier(token.Value), token);
                     }
 
                 case TokenType.LeftParen:
@@ -713,23 +727,27 @@ namespace PascalNET.Core.Parser
 
         private ProgramDeclaration? ParseProgramDeclaration()
         {
+            var programToken = _currentToken;
             Consume(TokenType.Program, "Ожидается 'program'");
 
             var nameToken = Consume(TokenType.Identifier, "Ожидается имя программы");
-            if (nameToken == null) return null;
+            if (nameToken == null)
+                return null;
 
             Consume(TokenType.Semicolon, "Ожидается ';' после имени программы");
 
-            return new ProgramDeclaration(nameToken.Value);
+            return TrackPosition(new ProgramDeclaration(nameToken.Value), programToken);
         }
 
         private FunctionDeclaration? ParseFunctionDeclaration()
         {
             var isFunction = Match(TokenType.Function);
+            var functionToken = _currentToken;
             Move();
 
             var nameToken = Consume(TokenType.Identifier, $"Ожидается имя {(isFunction ? "функции" : "процедуры")}");
-            if (nameToken == null) return null;
+            if (nameToken == null)
+                return null;
 
             List<Parameter> parameters = [];
             if (Match(TokenType.LeftParen))
@@ -768,7 +786,7 @@ namespace PascalNET.Core.Parser
 
             Consume(TokenType.Semicolon, $"Ожидается ';' после тела {(isFunction ? "функции" : "процедуры")}");
 
-            return new FunctionDeclaration(nameToken.Value, parameters, returnType, localDeclarations, body);
+            return TrackPosition(new FunctionDeclaration(nameToken.Value, parameters, returnType, localDeclarations, body), functionToken);
         }
 
         private List<Parameter> ParseParameterList()
@@ -780,29 +798,30 @@ namespace PascalNET.Core.Parser
                 List<string> parameterNames = [];
 
                 var nameToken = Consume(TokenType.Identifier, "Ожидается имя параметра");
-                if (nameToken == null) break;
+                if (nameToken == null)
+                    break;
                 parameterNames.Add(nameToken.Value);
 
                 while (Match(TokenType.Comma))
                 {
                     Move();
                     nameToken = Consume(TokenType.Identifier, "Ожидается имя параметра после ','");
-                    if (nameToken == null) break;
+                    if (nameToken == null)
+                        break;
                     parameterNames.Add(nameToken.Value);
                 }
 
                 Consume(TokenType.Colon, "Ожидается ':' после имен параметров");
 
                 var typeToken = ParseTypeToken();
-                if (typeToken == null) break;
+                if (typeToken == null)
+                    break;
 
-                // Добавляем параметры с указанным типом
                 foreach (var name in parameterNames)
                 {
                     parameters.Add(new Parameter(name, typeToken.Value));
                 }
 
-                // Если есть ';', продолжаем парсинг следующей группы параметров
                 if (Match(TokenType.Semicolon))
                 {
                     Move();

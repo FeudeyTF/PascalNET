@@ -49,7 +49,7 @@ namespace PascalNET
                 {
                     Console.WriteLine("\n=== Этап 3: Семантический анализ ===");
                     var semanticAnalyzer = new SemanticAnalyzer(errorReporter);
-                    semanticAnalyzer.AnalyzeProgram(ast);
+                    semanticAnalyzer.AnalyzeProgram(ast, parser.PositionTracker);
                 }
                 else if (ast == null)
                 {
@@ -91,9 +91,6 @@ namespace PascalNET
             }
         }
 
-        /// <summary>
-        /// Выполняет только лексический анализ
-        /// </summary>
         public void LexicAnalyze(string sourceCode)
         {
             ConsoleMessageFormatter errorReporter = new(sourceCode);
@@ -110,15 +107,11 @@ namespace PascalNET
             }
         }
 
-        /// <summary>
-        /// Выполняет только синтаксический анализ
-        /// </summary>
         public ExecutionNode? SyntaxAnalyze(string sourceCode)
         {
             var lexer = new Lexer(sourceCode, new ConsoleMessageFormatter());
             var tokens = lexer.Tokenize();
 
-            // Синтаксический анализ
             ConsoleMessageFormatter errorReporter = new(sourceCode);
             Parser parser = new(tokens, errorReporter);
             var ast = parser.ParseProgram();
@@ -169,16 +162,13 @@ namespace PascalNET
             if (ast != null)
             {
                 var semanticAnalyzer = new SemanticAnalyzer(errorReporter);
-                semanticAnalyzer.AnalyzeProgram(ast);
+                semanticAnalyzer.AnalyzeProgram(ast, parser.PositionTracker);
             }
 
             return new CompilationReport(sourceCode, tokens.Count, ast, errorReporter.GetErrorStatistics(), errorReporter.HasErrors, errorReporter.HasWarnings, errorReporter.HasErrors);
         }
     }
 
-    /// <summary>
-    /// Отчет о результатах компиляции
-    /// </summary>
     internal class CompilationReport
     {
         public string SourceCode { get; set; }

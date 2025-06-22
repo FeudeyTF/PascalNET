@@ -1,5 +1,4 @@
 using PascalNET.Core.Lexer.Tokens;
-using PascalNET.Core.Messages;
 
 namespace PascalNET.Core.Messages.Errors
 {

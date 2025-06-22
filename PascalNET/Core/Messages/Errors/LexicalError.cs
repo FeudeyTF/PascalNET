@@ -1,5 +1,3 @@
-using PascalNET.Core.Messages;
-
 namespace PascalNET.Core.Messages.Errors
 {
     public class LexicalError : CompilerError
