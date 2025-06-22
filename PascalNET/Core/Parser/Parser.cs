@@ -295,7 +295,7 @@ namespace PascalNET.Core.Parser
                 Synchronize();
             }
 
-            if (_currentToken == null) 
+            if (_currentToken == null)
                 return null;
 
             try
@@ -334,7 +334,7 @@ namespace PascalNET.Core.Parser
                 if (_panicMode)
                 {
                     Synchronize();
-                    if (Match(TokenType.End)) 
+                    if (Match(TokenType.End))
                         break;
                 }
 
@@ -607,25 +607,23 @@ namespace PascalNET.Core.Parser
             if (_currentToken == null)
                 return null;
 
+            var token = _currentToken;
+
             switch (_currentToken.Type)
             {
                 case TokenType.IntegerLiteral:
-                    var intToken = _currentToken;
                     Move();
-                    return new IntegerLiteral(int.Parse(intToken.Value));
+                    return new IntegerLiteral(int.Parse(token.Value));
 
                 case TokenType.RealLiteral:
-                    var realToken = _currentToken;
                     Move();
-                    return new RealLiteral(double.Parse(realToken.Value.Replace('.', ',')));
+                    return new RealLiteral(double.Parse(token.Value.Replace('.', ',')));
 
                 case TokenType.StringLiteral:
-                    var stringToken = _currentToken;
                     Move();
-                    var stringValue = stringToken.Value[1..^1];
+                    var stringValue = token.Value[1..^1];
                     return new StringLiteral(stringValue);
                 case TokenType.Identifier:
-                    var identifierToken = _currentToken;
                     Move();
 
                     if (Match(TokenType.LeftParen))
@@ -656,17 +654,18 @@ namespace PascalNET.Core.Parser
                         }
 
                         Consume(TokenType.RightParen, "Ожидается ')' после аргументов функции");
-                        return new FunctionCall(identifierToken.Value, arguments);
+                        return new FunctionCall(token.Value, arguments);
                     }
                     else
                     {
-                        return new Identifier(identifierToken.Value);
+                        return new Identifier(token.Value);
                     }
 
                 case TokenType.LeftParen:
                     Move();
                     var expression = ParseExpression();
-                    if (expression == null) return null;
+                    if (expression == null)
+                        return null;
                     Consume(TokenType.RightParen, "Ожидается ')' после выражения");
                     return expression;
 
