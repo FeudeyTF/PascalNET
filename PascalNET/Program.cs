@@ -10,7 +10,7 @@ namespace PascalNET
             List<CodeExample> examples =
             [
                 new CodeExample("Корректная программа",
-                   @"var x, y: integer;
+                   @"var x, y, z: integer;
                     begin
                         x := 10;
                         y := x + 5;

@@ -24,23 +24,6 @@
             Suggestion = suggestion;
         }
 
-        public override string ToString()
-        {
-            var result = $"{Message}\n";
-
-            if (!string.IsNullOrEmpty(SourceFragment))
-            {
-                result += $"  Фрагмент:\n{SourceFragment}\n";
-            }
-
-            if (!string.IsNullOrEmpty(Suggestion))
-            {
-                result += $"  Предложение: {Suggestion}\n";
-            }
-
-            return result;
-        }
-
         public virtual ConsoleColor GetColor()
         {
             return ConsoleColor.White;

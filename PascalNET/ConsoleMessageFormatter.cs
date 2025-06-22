@@ -43,7 +43,7 @@ namespace PascalNET
 
         public void ReportLexicalError(string message, int line, int column, string suggestion = "")
         {
-            ReportMessage(new LexicalError(message, line, column, suggestion));
+            ReportMessage(new LexicalError(message, line, column, suggestion: suggestion));
         }
 
         public void ReportSyntaxError(string message, Token? token, string suggestion = "")
@@ -58,12 +58,12 @@ namespace PascalNET
 
         public void ReportTypeError(string message, int line, int column, string suggestion = "")
         {
-            ReportMessage(new TypeError(message, line, column, suggestion));
+            ReportMessage(new TypeError(message, line, column, suggestion: suggestion));
         }
 
         public void ReportWarning(string message, int line, int column, string suggestion = "")
         {
-            ReportMessage(new WarningMessage(message, line, column, suggestion));
+            ReportMessage(new WarningMessage(message, line, column, suggestion: suggestion));
         }
 
         public void ReportMessage(string message, int line, int column, string sourceFragment = "", string suggestion = "")
@@ -107,20 +107,27 @@ namespace PascalNET
 
         private void PrintMessage(CompilerMessage message)
         {
+            var type = message switch
+            {
+                CompilerError => "Ошибка!",
+                WarningMessage => "Предупреждение.",
+                _ => "Сообщение."
+            };
             Console.ForegroundColor = message.GetColor();
-            Console.WriteLine(message.ToString());
+            Console.Write(type + " ");
             Console.ResetColor();
-        }
+            Console.WriteLine($"{message.Message} ({message.Line}, {message.Column}). {message.Suggestion}");
 
-        public void Clear()
-        {
-            _messages.Clear();
+            if (!string.IsNullOrEmpty(message.SourceFragment))
+            {
+                Console.WriteLine(message.SourceFragment);
+            }
+
         }
 
         public Dictionary<string, int> GetErrorStatistics()
         {
-            return _messages.GroupBy(e => e.GetType().Name)
-                         .ToDictionary(g => g.Key, g => g.Count());
+            return _messages.GroupBy(e => e.GetType().Name).ToDictionary(g => g.Key, g => g.Count());
         }
 
         public bool CanContinueCompilation()

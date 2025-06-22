@@ -5,13 +5,8 @@ namespace PascalNET.Core.Messages.Errors
     internal class SemanticError : CompilerError
     {
         public SemanticError(string message, int line, int column, string sourceFragment = "", string suggestion = "")
-            : base($"Семантическая ошибка в строке {line}, столбец {column}: {message}", line, column, sourceFragment, suggestion)
+            : base(message, line, column, sourceFragment, suggestion)
         {
-        }
-
-        public override ConsoleColor GetColor()
-        {
-            return ConsoleColor.DarkRed;
         }
     }
 }

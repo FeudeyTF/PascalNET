@@ -3,7 +3,7 @@
     internal class WarningMessage : CompilerMessage
     {
         public WarningMessage(string message, int line, int column, string sourceFragment = "", string suggestion = "")
-            : base($"Предупреждение в строке {line}, столбец {column}: {message}", line, column, sourceFragment, suggestion)
+            : base(message, line, column, sourceFragment, suggestion)
         {
         }
 
