@@ -5,6 +5,7 @@ namespace PascalNET.Core.AST.Statements
     internal class CycleStatement : IStatement
     {
         public IExpression Condition { get; set; }
+
         public IStatement Statement { get; set; }
 
         public CycleStatement(IExpression condition, IStatement statement)
@@ -13,5 +14,4 @@ namespace PascalNET.Core.AST.Statements
             Statement = statement;
         }
     }
-
 }

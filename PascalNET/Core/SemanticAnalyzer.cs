@@ -10,14 +10,16 @@ namespace PascalNET.Core
 {
     internal class SemanticAnalyzer
     {
-        private readonly List<Dictionary<string, VariableInfo>> _scopeStack;
-
-        private readonly ErrorReporter _errorReporter;
-
-        private readonly HashSet<string> _builtInTypes = new(StringComparer.OrdinalIgnoreCase)
+        private static readonly HashSet<string> _builtInTypes = new(StringComparer.OrdinalIgnoreCase)
         {
             "integer", "real", "boolean", "string"
         };
+
+        private readonly List<Dictionary<string, VariableInfo>> _scopeStack;
+
+        private readonly Dictionary<string, FunctionInfo> _functions;
+
+        private readonly ErrorReporter _errorReporter;
 
         public SemanticAnalyzer(ErrorReporter errorReporter)
         {
@@ -26,35 +28,26 @@ namespace PascalNET.Core
             [
                 new Dictionary<string, VariableInfo>(StringComparer.OrdinalIgnoreCase)
             ];
+            _functions = new Dictionary<string, FunctionInfo>(StringComparer.OrdinalIgnoreCase);
         }
 
-        /// <summary>
-        /// Входит в новую область видимости
-        /// </summary>
         public void EnterScope()
         {
             _scopeStack.Add(new Dictionary<string, VariableInfo>(StringComparer.OrdinalIgnoreCase));
         }
 
-        /// <summary>
-        /// Выходит из текущей области видимости
-        /// </summary>
         public void ExitScope()
         {
             if (_scopeStack.Count > 1)
             {
                 var leavingScope = _scopeStack.Last();
 
-                // Проверяем неиспользуемые переменные в покидаемой области
                 CheckUnusedVariablesInScope(leavingScope);
 
                 _scopeStack.RemoveAt(_scopeStack.Count - 1);
             }
         }
 
-        /// <summary>
-        /// Объявляет переменную в текущей области видимости
-        /// </summary>
         public void DeclareVariable(string name, string varType, int line, int column)
         {
             if (string.IsNullOrEmpty(name))
@@ -74,10 +67,8 @@ namespace PascalNET.Core
 
             var currentScope = _scopeStack.Last();
 
-            // Проверяем, не объявлена ли переменная в текущей области видимости
-            if (currentScope.ContainsKey(name))
+            if (currentScope.TryGetValue(name, out var existingVar))
             {
-                var existingVar = currentScope[name];
                 _errorReporter.ReportSemanticError(
                     $"Переменная '{name}' уже объявлена в данной области видимости (строка {existingVar.Line})",
                     line, column,
@@ -86,7 +77,6 @@ namespace PascalNET.Core
                 return;
             }
 
-            // Проверяем корректность типа
             if (!_builtInTypes.Contains(varType))
             {
                 _errorReporter.ReportTypeError(
@@ -97,27 +87,14 @@ namespace PascalNET.Core
                 return;
             }
 
-            // Добавляем переменную в область видимости
-            currentScope[name] = new VariableInfo
-            {
-                Name = name,
-                Type = varType,
-                Line = line,
-                Column = column,
-                IsUsed = false,
-                IsDeclared = true
-            };
+            currentScope[name] = new VariableInfo(name, varType, line, column);
         }
 
-        /// <summary>
-        /// Использует переменную и проверяет её объявление
-        /// </summary>
         public VariableInfo? UseVariable(string name, int line, int column)
         {
             if (string.IsNullOrEmpty(name))
                 return null;
 
-            // Ищем переменную во всех областях видимости (от внутренней к внешней)
             for (int i = _scopeStack.Count - 1; i >= 0; i--)
             {
                 if (_scopeStack[i].TryGetValue(name, out var variable))
@@ -126,8 +103,6 @@ namespace PascalNET.Core
                     return variable;
                 }
             }
-
-            // Переменная не найдена
             _errorReporter.ReportSemanticError(
                 $"Переменная '{name}' не объявлена",
                 line, column,
@@ -137,9 +112,90 @@ namespace PascalNET.Core
             return null;
         }
 
-        /// <summary>
-        /// Проверяет совместимость типов
-        /// </summary>
+        public void DeclareFunction(string name, List<Parameter> parameters, string? returnType, int line, int column)
+        {
+            if (string.IsNullOrEmpty(name))
+                return;
+
+            if (_functions.TryGetValue(name, out var existingFunc))
+            {
+                _errorReporter.ReportSemanticError(
+                    $"{(existingFunc.IsProcedure ? "Процедура" : "Функция")} '{name}' уже объявлена (строка {existingFunc.Line})",
+                    line, column,
+                    "Используйте другое имя или измените существующее объявление"
+                );
+                return;
+            }
+
+            if (returnType != null && !_builtInTypes.Contains(returnType))
+            {
+                _errorReporter.ReportTypeError(
+                    $"Неизвестный тип возвращаемого значения '{returnType}'",
+                    line, column,
+                    "Используйте один из стандартных типов: integer, real, boolean, string"
+                );
+                return;
+            }
+
+            var parameterInfos = from p in parameters select new ParameterInfo(p.Name, p.TypeName);
+
+            foreach (var param in parameterInfos)
+            {
+                if (!_builtInTypes.Contains(param.Type))
+                {
+                    _errorReporter.ReportTypeError(
+                        $"Неизвестный тип параметра '{param.Type}' в {(returnType != null ? "функции" : "процедуре")} '{name}'",
+                        line, column,
+                        "Используйте один из стандартных типов: integer, real, boolean, string"
+                    );
+                }
+            }
+
+            _functions[name] = new FunctionInfo(name, [.. parameterInfos], returnType, line, column);
+        }
+
+        public FunctionInfo? UseFunction(string name, List<string> argumentTypes, int line, int column)
+        {
+            if (string.IsNullOrEmpty(name))
+                return null;
+
+            if (!_functions.TryGetValue(name, out var function))
+            {
+                _errorReporter.ReportSemanticError(
+                    $"Функция или процедура '{name}' не объявлена",
+                    line, column,
+                    "Объявите функцию/процедуру перед использованием"
+                );
+                return null;
+            }
+
+            function.IsUsed = true;
+
+            if (argumentTypes.Count != function.Parameters.Count)
+            {
+                _errorReporter.ReportSemanticError(
+                    $"Неверное количество аргументов для {(function.IsProcedure ? "процедуры" : "функции")} '{name}': ожидается {function.Parameters.Count}, передано {argumentTypes.Count}",
+                    line, column,
+                    "Проверьте количество передаваемых аргументов"
+                );
+                return function;
+            }
+
+            for (int i = 0; i < argumentTypes.Count; i++)
+            {
+                if (!AreTypesCompatible(argumentTypes[i], function.Parameters[i].Type))
+                {
+                    _errorReporter.ReportTypeError(
+                        $"Несовместимый тип аргумента {i + 1} в вызове {(function.IsProcedure ? "процедуры" : "функции")} '{name}': ожидается '{function.Parameters[i].Type}', передан '{argumentTypes[i]}'",
+                        line, column,
+                        "Убедитесь в совместимости типов аргументов"
+                    );
+                }
+            }
+
+            return function;
+        }
+
         public bool AreTypesCompatible(string type1, string type2)
         {
             if (string.IsNullOrEmpty(type1) || string.IsNullOrEmpty(type2))
@@ -148,20 +204,15 @@ namespace PascalNET.Core
             type1 = type1.ToLower();
             type2 = type2.ToLower();
 
-            // Точное совпадение
             if (type1 == type2)
                 return true;
 
-            // integer может быть присвоен real
             if (type1 == "integer" && type2 == "real")
                 return true;
 
             return false;
         }
 
-        /// <summary>
-        /// Проверяет типы в выражении присваивания
-        /// </summary>
         public void CheckAssignment(string variableName, string expressionType, int line, int column)
         {
             var variable = UseVariable(variableName, line, column);
@@ -178,9 +229,6 @@ namespace PascalNET.Core
             }
         }
 
-        /// <summary>
-        /// Проверяет типы в бинарной операции
-        /// </summary>
         public string? CheckBinaryOperation(string leftType, string operator_, string rightType, int line, int column)
         {
             if (string.IsNullOrEmpty(leftType) || string.IsNullOrEmpty(rightType))
@@ -223,9 +271,8 @@ namespace PascalNET.Core
 
         private string? CheckArithmeticOperation(string leftType, string rightType, string operator_, int line, int column)
         {
-            // Арифметические операции допустимы для числовых типов
-            bool leftIsNumeric = leftType == "integer" || leftType == "real";
-            bool rightIsNumeric = rightType == "integer" || rightType == "real";
+            var leftIsNumeric = leftType == "integer" || leftType == "real";
+            var rightIsNumeric = rightType == "integer" || rightType == "real";
 
             if (!leftIsNumeric || !rightIsNumeric)
             {
@@ -237,7 +284,6 @@ namespace PascalNET.Core
                 return null;
             }
 
-            // Результат real если хотя бы один операнд real
             if (leftType == "real" || rightType == "real")
                 return "real";
 
@@ -246,7 +292,6 @@ namespace PascalNET.Core
 
         private string? CheckComparisonOperation(string leftType, string rightType, string operator_, int line, int column)
         {
-            // Сравнение возможно между совместимыми типами
             if (!AreTypesCompatible(leftType, rightType) && !AreTypesCompatible(rightType, leftType))
             {
                 _errorReporter.ReportTypeError(
@@ -262,7 +307,6 @@ namespace PascalNET.Core
 
         private string? CheckLogicalOperation(string leftType, string rightType, string operator_, int line, int column)
         {
-            // Логические операции применимы только к boolean
             if (leftType != "boolean" || rightType != "boolean")
             {
                 _errorReporter.ReportTypeError(
@@ -278,7 +322,6 @@ namespace PascalNET.Core
 
         private string? CheckModOperation(string leftType, string rightType, int line, int column)
         {
-            // Операция mod применима только к integer
             if (leftType != "integer" || rightType != "integer")
             {
                 _errorReporter.ReportTypeError(
@@ -292,9 +335,6 @@ namespace PascalNET.Core
             return "integer";
         }
 
-        /// <summary>
-        /// Проверяет унарную операцию
-        /// </summary>
         public string? CheckUnaryOperation(string operator_, string operandType, int line, int column)
         {
             if (string.IsNullOrEmpty(operandType))
@@ -338,27 +378,24 @@ namespace PascalNET.Core
             }
         }
 
-        /// <summary>
-        /// Анализирует дерево синтаксического анализа
-        /// </summary>
         public void AnalyzeProgram(ExecutionNode programNode)
         {
-            if (programNode == null) return;
+            if (programNode == null)
+                return;
 
-            // Обрабатываем объявления переменных
             foreach (var declaration in programNode.Declarations)
             {
                 AnalyzeDeclaration(declaration);
             }
 
-            // Обрабатываем основной оператор программы
             if (programNode.Statement != null)
             {
                 AnalyzeStatement(programNode.Statement);
             }
 
-            // Проверяем неиспользуемые переменные в глобальной области
             CheckUnusedVariablesInScope(_scopeStack.First());
+
+            CheckUnusedFunctions();
         }
 
         private void AnalyzeDeclaration(IDeclaration declaration)
@@ -368,6 +405,31 @@ namespace PascalNET.Core
                 foreach (var varName in varDecl.Identifiers)
                 {
                     DeclareVariable(varName, varDecl.TypeName, 0, 0);
+                }
+            }
+            else if (declaration is FunctionDeclaration funcDecl)
+            {
+                DeclareFunction(funcDecl.Name, funcDecl.Parameters, funcDecl.ReturnType, 0, 0);
+
+                EnterScope();
+
+                try
+                {
+                    foreach (var param in funcDecl.Parameters)
+                    {
+                        DeclareVariable(param.Name, param.TypeName, 0, 0);
+                    }
+
+                    foreach (var localDecl in funcDecl.LocalDeclarations)
+                    {
+                        AnalyzeDeclaration(localDecl);
+                    }
+
+                    AnalyzeStatement(funcDecl.Body);
+                }
+                finally
+                {
+                    ExitScope();
                 }
             }
         }
@@ -387,6 +449,9 @@ namespace PascalNET.Core
                     break;
                 case CycleStatement cycle:
                     AnalyzeCycleStatement(cycle);
+                    break;
+                case ProcedureCallStatement procedureCall:
+                    AnalyzeProcedureCall(procedureCall);
                     break;
             }
         }
@@ -443,9 +508,36 @@ namespace PascalNET.Core
                     "Используйте логическое выражение в условии цикла"
                 );
             }
-
             AnalyzeStatement(cycle.Statement);
         }
+
+        private void AnalyzeProcedureCall(ProcedureCallStatement procedureCall)
+        {
+            // Анализируем аргументы процедуры
+            List<string> argumentTypes = [];
+            foreach (var argument in procedureCall.Arguments)
+            {
+                var argType = AnalyzeExpression(argument);
+                if (argType != null)
+                {
+                    argumentTypes.Add(argType);
+                }
+            }
+
+            // Используем процедуру и проверяем её объявление
+            var function = UseFunction(procedureCall.Name, argumentTypes, 0, 0);
+
+            // Проверяем, что это действительно процедура, а не функция
+            if (function != null && !function.IsProcedure)
+            {
+                _errorReporter.ReportSemanticError(
+                    $"'{procedureCall.Name}' является функцией, а не процедурой. Используйте её в выражении",
+                    0, 0,
+                    "Функции должны использоваться в выражениях, а процедуры - как отдельные операторы"
+                );
+            }
+        }
+
         private string? AnalyzeExpression(IExpression expression)
         {
             return expression switch
@@ -456,6 +548,7 @@ namespace PascalNET.Core
                 StringLiteral _ => "string",
                 BinaryOperation binary => AnalyzeBinaryOperation(binary),
                 UnaryOperation unary => AnalyzeUnaryOperation(unary),
+                FunctionCall functionCall => AnalyzeFunctionCall(functionCall),
                 _ => null
             };
         }
@@ -490,6 +583,21 @@ namespace PascalNET.Core
             return null;
         }
 
+        private string? AnalyzeFunctionCall(FunctionCall functionCall)
+        {
+            List<string> argumentTypes = [];
+            foreach (var argument in functionCall.Arguments)
+            {
+                var argType = AnalyzeExpression(argument);
+                if (argType != null)
+                {
+                    argumentTypes.Add(argType);
+                }
+            }
+
+            return UseFunction(functionCall.Name, argumentTypes, 0, 0)?.ReturnType;
+        }
+
         private void CheckUnusedVariablesInScope(Dictionary<string, VariableInfo> scope)
         {
             foreach (var kvp in scope)
@@ -506,19 +614,92 @@ namespace PascalNET.Core
                 }
             }
         }
+
+        private void CheckUnusedFunctions()
+        {
+            foreach (var kvp in _functions)
+            {
+                var function = kvp.Value;
+                if (!function.IsUsed)
+                {
+                    _errorReporter.ReportWarning(
+                        $"{(function.IsProcedure ? "Процедура" : "Функция")} '{function.Name}' объявлена, но не используется",
+                        function.Line,
+                        function.Column,
+                        $"Удалите неиспользуемую {(function.IsProcedure ? "процедуру" : "функцию")} или используйте её в коде"
+                    );
+                }
+            }
+        }
     }
 
-    /// <summary>
-    /// Информация о переменной
-    /// </summary>
+    public class ParameterInfo
+    {
+        public string Name { get; set; }
+
+        public string Type { get; set; }
+
+        public ParameterInfo(string name, string type)
+        {
+            Name = name;
+            Type = type;
+        }
+    }
+
+    public class FunctionInfo
+    {
+        public string Name { get; set; }
+
+        public List<ParameterInfo> Parameters { get; set; }
+
+        public string? ReturnType { get; set; }
+
+        public int Line { get; set; }
+
+        public int Column { get; set; }
+
+        public bool IsUsed { get; set; }
+
+        public bool IsDeclared { get; set; }
+
+        public bool IsProcedure => ReturnType == null;
+
+        public FunctionInfo(string name, List<ParameterInfo> parameters, string? returnType, int line, int column)
+        {
+            Name = name;
+            Parameters = parameters;
+            ReturnType = returnType;
+            Line = line;
+            Column = column;
+            IsUsed = false;
+            IsDeclared = true;
+        }
+    }
+
     public class VariableInfo
     {
-        public string Name { get; set; } = "";
-        public string Type { get; set; } = "";
+        public string Name { get; set; }
+
+        public string Type { get; set; }
+
         public int Line { get; set; }
+
         public int Column { get; set; }
+
         public bool IsUsed { get; set; }
+
         public bool IsDeclared { get; set; }
+
         public object? Value { get; set; }
+
+        public VariableInfo(string name, string type, int line, int column)
+        {
+            Name = name;
+            Type = type;
+            Line = line;
+            Column = column;
+            IsUsed = false;
+            IsDeclared = true;
+        }
     }
 }

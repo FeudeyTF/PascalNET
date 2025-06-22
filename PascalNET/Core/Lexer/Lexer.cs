@@ -5,10 +5,7 @@ using System.Text.RegularExpressions;
 
 namespace PascalNET.Core.Lexer
 {
-    /// <summary>
-    /// Лексический анализатор с обработкой ошибок
-    /// </summary>
-    public class Lexer
+    internal class Lexer
     {
         private static readonly Dictionary<string, TokenType> _keywords = new()
         {
@@ -226,10 +223,7 @@ namespace PascalNET.Core.Lexer
 
         private bool ValidateIdentifier(Token token)
         {
-            var value = token.Value;
-
-            // Проверяем длину идентификатора
-            if (value.Length > 63)
+            if (token.Value.Length > 63)
             {
                 _errorReporter.ReportWarning(
                     "Идентификатор слишком длинный (рекомендуется не более 63 символов)",
