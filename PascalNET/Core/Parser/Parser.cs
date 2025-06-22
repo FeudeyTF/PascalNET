@@ -309,10 +309,10 @@ namespace PascalNET.Core.Parser
                     _ => throw new InvalidOperationException($"Неожиданный токен в начале оператора: {_currentToken.Type}")
                 };
             }
-            catch (Exception)
+            catch (Exception e)
             {
                 _errorReporter.ReportSyntaxError(
-                    "Ошибка при разборе оператора",
+                    "Ошибка при разборе оператора: " + e.ToString(),
                     _currentToken,
                     "Проверьте синтаксис оператора"
                 );
@@ -617,7 +617,7 @@ namespace PascalNET.Core.Parser
                 case TokenType.RealLiteral:
                     var realToken = _currentToken;
                     Move();
-                    return new RealLiteral(double.Parse(realToken.Value));
+                    return new RealLiteral(double.Parse(realToken.Value.Replace('.', ',')));
 
                 case TokenType.StringLiteral:
                     var stringToken = _currentToken;
