@@ -1,6 +1,4 @@
-﻿using PascalNET.Errors;
-
-namespace PascalNET.Compiler.Messages
+﻿namespace PascalNET.Core.Messages
 {
     internal class WarningMessage : CompilerMessage
     {

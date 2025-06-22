@@ -1,11 +1,10 @@
-using PascalNET.Compiler.Messages;
-using PascalNET.Compiler.Messages.Errors;
 using PascalNET.Core.Lexer.Tokens;
-using PascalNET.Errors;
+using PascalNET.Core.Messages;
+using PascalNET.Core.Messages.Errors;
 
-namespace PascalNET.Compiler
+namespace PascalNET
 {
-    public class ErrorReporter
+    public class ConsoleMessageFormatter : IMessageFormatter
     {
         public bool HasErrors => _messages.Any(e => e is CompilerError);
 
@@ -25,7 +24,7 @@ namespace PascalNET.Compiler
 
         private readonly int _maxErrors;
 
-        public ErrorReporter(string sourceCode = "", int maxErrors = 20)
+        public ConsoleMessageFormatter(string sourceCode = "", int maxErrors = 20)
         {
             _messages = [];
             _sourceCode = sourceCode;
@@ -49,7 +48,7 @@ namespace PascalNET.Compiler
 
         public void ReportSyntaxError(string message, Token? token, string suggestion = "")
         {
-            ReportMessage(new SyntaxError(message, token));
+            ReportMessage(new SyntaxError(message, token, suggestion: suggestion));
         }
 
         public void ReportSemanticError(string message, int line, int column, string suggestion = "")
@@ -65,6 +64,11 @@ namespace PascalNET.Compiler
         public void ReportWarning(string message, int line, int column, string suggestion = "")
         {
             ReportMessage(new WarningMessage(message, line, column, suggestion));
+        }
+
+        public void ReportMessage(string message, int line, int column, string sourceFragment = "", string suggestion = "")
+        {
+            ReportMessage(new CompilerMessage(message, line, column, sourceFragment, suggestion));
         }
 
         private string GetSourceFragment(int line, int column)
@@ -113,26 +117,17 @@ namespace PascalNET.Compiler
             _messages.Clear();
         }
 
-        /// <summary>
-        /// Получает статистику ошибок по типам
-        /// </summary>
         public Dictionary<string, int> GetErrorStatistics()
         {
             return _messages.GroupBy(e => e.GetType().Name)
                          .ToDictionary(g => g.Key, g => g.Count());
         }
 
-        /// <summary>
-        /// Проверяет, можно ли продолжать компиляцию
-        /// </summary>
         public bool CanContinueCompilation()
         {
             return !_messages.Any(e => e is LexicalError);
         }
 
-        /// <summary>
-        /// Проверяет, можно ли выполнять семантический анализ
-        /// </summary>
         public bool CanPerformSemanticAnalysis()
         {
             return !_messages.Any(e => e is LexicalError);

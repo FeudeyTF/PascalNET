@@ -1,4 +1,4 @@
-﻿namespace PascalNET.Errors
+﻿namespace PascalNET.Core.Messages
 {
     /// <summary>
     /// Класс для представления сообщения компилятора

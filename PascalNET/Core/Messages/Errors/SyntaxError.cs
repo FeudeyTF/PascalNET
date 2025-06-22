@@ -1,7 +1,7 @@
 using PascalNET.Core.Lexer.Tokens;
-using PascalNET.Errors;
+using PascalNET.Core.Messages;
 
-namespace PascalNET.Compiler.Messages.Errors
+namespace PascalNET.Core.Messages.Errors
 {
     public class SyntaxError : CompilerError
     {

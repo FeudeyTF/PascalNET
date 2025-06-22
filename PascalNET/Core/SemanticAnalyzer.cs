@@ -1,10 +1,10 @@
-using PascalNET.Compiler;
 using PascalNET.Core.AST;
 using PascalNET.Core.AST.BasicNodes;
 using PascalNET.Core.AST.Declartions;
 using PascalNET.Core.AST.Expressions;
 using PascalNET.Core.AST.Nodes;
 using PascalNET.Core.AST.Statements;
+using PascalNET.Core.Messages;
 
 namespace PascalNET.Core
 {
@@ -19,11 +19,11 @@ namespace PascalNET.Core
 
         private readonly Dictionary<string, FunctionInfo> _functions;
 
-        private readonly ErrorReporter _errorReporter;
+        private readonly IMessageFormatter _messageFormatter;
 
-        public SemanticAnalyzer(ErrorReporter errorReporter)
+        public SemanticAnalyzer(IMessageFormatter messageFormatter)
         {
-            _errorReporter = errorReporter;
+            _messageFormatter = messageFormatter;
             _scopeStack =
             [
                 new Dictionary<string, VariableInfo>(StringComparer.OrdinalIgnoreCase)
@@ -57,7 +57,7 @@ namespace PascalNET.Core
 
             if (string.IsNullOrEmpty(varType))
             {
-                _errorReporter.ReportTypeError(
+                _messageFormatter.ReportTypeError(
                     $"Не указан тип для переменной '{name}'",
                     line, column,
                     "Укажите тип переменной"
@@ -69,7 +69,7 @@ namespace PascalNET.Core
 
             if (currentScope.TryGetValue(name, out var existingVar))
             {
-                _errorReporter.ReportSemanticError(
+                _messageFormatter.ReportSemanticError(
                     $"Переменная '{name}' уже объявлена в данной области видимости (строка {existingVar.Line})",
                     line, column,
                     "Используйте другое имя или измените существующее объявление"
@@ -79,7 +79,7 @@ namespace PascalNET.Core
 
             if (!_builtInTypes.Contains(varType))
             {
-                _errorReporter.ReportTypeError(
+                _messageFormatter.ReportTypeError(
                     $"Неизвестный тип '{varType}'",
                     line, column,
                     "Используйте один из стандартных типов: integer, real, boolean, string"
@@ -103,7 +103,7 @@ namespace PascalNET.Core
                     return variable;
                 }
             }
-            _errorReporter.ReportSemanticError(
+            _messageFormatter.ReportSemanticError(
                 $"Переменная '{name}' не объявлена",
                 line, column,
                 "Объявите переменную перед использованием"
@@ -119,7 +119,7 @@ namespace PascalNET.Core
 
             if (_functions.TryGetValue(name, out var existingFunc))
             {
-                _errorReporter.ReportSemanticError(
+                _messageFormatter.ReportSemanticError(
                     $"{(existingFunc.IsProcedure ? "Процедура" : "Функция")} '{name}' уже объявлена (строка {existingFunc.Line})",
                     line, column,
                     "Используйте другое имя или измените существующее объявление"
@@ -129,7 +129,7 @@ namespace PascalNET.Core
 
             if (returnType != null && !_builtInTypes.Contains(returnType))
             {
-                _errorReporter.ReportTypeError(
+                _messageFormatter.ReportTypeError(
                     $"Неизвестный тип возвращаемого значения '{returnType}'",
                     line, column,
                     "Используйте один из стандартных типов: integer, real, boolean, string"
@@ -143,7 +143,7 @@ namespace PascalNET.Core
             {
                 if (!_builtInTypes.Contains(param.Type))
                 {
-                    _errorReporter.ReportTypeError(
+                    _messageFormatter.ReportTypeError(
                         $"Неизвестный тип параметра '{param.Type}' в {(returnType != null ? "функции" : "процедуре")} '{name}'",
                         line, column,
                         "Используйте один из стандартных типов: integer, real, boolean, string"
@@ -161,7 +161,7 @@ namespace PascalNET.Core
 
             if (!_functions.TryGetValue(name, out var function))
             {
-                _errorReporter.ReportSemanticError(
+                _messageFormatter.ReportSemanticError(
                     $"Функция или процедура '{name}' не объявлена",
                     line, column,
                     "Объявите функцию/процедуру перед использованием"
@@ -173,7 +173,7 @@ namespace PascalNET.Core
 
             if (argumentTypes.Count != function.Parameters.Count)
             {
-                _errorReporter.ReportSemanticError(
+                _messageFormatter.ReportSemanticError(
                     $"Неверное количество аргументов для {(function.IsProcedure ? "процедуры" : "функции")} '{name}': ожидается {function.Parameters.Count}, передано {argumentTypes.Count}",
                     line, column,
                     "Проверьте количество передаваемых аргументов"
@@ -185,7 +185,7 @@ namespace PascalNET.Core
             {
                 if (!AreTypesCompatible(argumentTypes[i], function.Parameters[i].Type))
                 {
-                    _errorReporter.ReportTypeError(
+                    _messageFormatter.ReportTypeError(
                         $"Несовместимый тип аргумента {i + 1} в вызове {(function.IsProcedure ? "процедуры" : "функции")} '{name}': ожидается '{function.Parameters[i].Type}', передан '{argumentTypes[i]}'",
                         line, column,
                         "Убедитесь в совместимости типов аргументов"
@@ -221,7 +221,7 @@ namespace PascalNET.Core
 
             if (!AreTypesCompatible(expressionType, variable.Type))
             {
-                _errorReporter.ReportTypeError(
+                _messageFormatter.ReportTypeError(
                     $"Несовместимые типы: невозможно присвоить значение типа '{expressionType}' переменной '{variableName}' типа '{variable.Type}'",
                     line, column,
                     "Убедитесь в совместимости типов или выполните явное преобразование"
@@ -261,7 +261,7 @@ namespace PascalNET.Core
                     return CheckModOperation(leftType, rightType, line, column);
 
                 default:
-                    _errorReporter.ReportSemanticError(
+                    _messageFormatter.ReportSemanticError(
                         $"Неизвестная операция: {operator_}",
                         line, column
                     );
@@ -276,7 +276,7 @@ namespace PascalNET.Core
 
             if (!leftIsNumeric || !rightIsNumeric)
             {
-                _errorReporter.ReportTypeError(
+                _messageFormatter.ReportTypeError(
                     $"Арифметическая операция '{operator_}' неприменима к типам '{leftType}' и '{rightType}'",
                     line, column,
                     "Используйте числовые типы (integer или real)"
@@ -294,7 +294,7 @@ namespace PascalNET.Core
         {
             if (!AreTypesCompatible(leftType, rightType) && !AreTypesCompatible(rightType, leftType))
             {
-                _errorReporter.ReportTypeError(
+                _messageFormatter.ReportTypeError(
                     $"Сравнение '{operator_}' неприменимо к типам '{leftType}' и '{rightType}'",
                     line, column,
                     "Сравнивайте значения совместимых типов"
@@ -309,7 +309,7 @@ namespace PascalNET.Core
         {
             if (leftType != "boolean" || rightType != "boolean")
             {
-                _errorReporter.ReportTypeError(
+                _messageFormatter.ReportTypeError(
                     $"Логическая операция '{operator_}' применима только к типу boolean",
                     line, column,
                     "Используйте логические выражения"
@@ -324,7 +324,7 @@ namespace PascalNET.Core
         {
             if (leftType != "integer" || rightType != "integer")
             {
-                _errorReporter.ReportTypeError(
+                _messageFormatter.ReportTypeError(
                     "Операция 'mod' применима только к целым числам",
                     line, column,
                     "Используйте целочисленные операнды"
@@ -348,7 +348,7 @@ namespace PascalNET.Core
                 case "-":
                     if (operandType != "integer" && operandType != "real")
                     {
-                        _errorReporter.ReportTypeError(
+                        _messageFormatter.ReportTypeError(
                             $"Унарная операция '{operator_}' неприменима к типу '{operandType}'",
                             line, column,
                             "Используйте числовой тип"
@@ -360,7 +360,7 @@ namespace PascalNET.Core
                 case "not":
                     if (operandType != "boolean")
                     {
-                        _errorReporter.ReportTypeError(
+                        _messageFormatter.ReportTypeError(
                             "Операция 'not' применима только к типу boolean",
                             line, column,
                             "Используйте логическое выражение"
@@ -370,7 +370,7 @@ namespace PascalNET.Core
                     return "boolean";
 
                 default:
-                    _errorReporter.ReportSemanticError(
+                    _messageFormatter.ReportSemanticError(
                         $"Неизвестная унарная операция: {operator_}",
                         line, column
                     );
@@ -482,7 +482,7 @@ namespace PascalNET.Core
             var conditionType = AnalyzeExpression(condition.Condition);
             if (conditionType != null && conditionType != "boolean")
             {
-                _errorReporter.ReportTypeError(
+                _messageFormatter.ReportTypeError(
                     $"Условие должно иметь тип boolean, получен {conditionType}",
                     0, 0,
                     "Используйте логическое выражение в условии"
@@ -502,7 +502,7 @@ namespace PascalNET.Core
             var conditionType = AnalyzeExpression(cycle.Condition);
             if (conditionType != null && conditionType != "boolean")
             {
-                _errorReporter.ReportTypeError(
+                _messageFormatter.ReportTypeError(
                     $"Условие цикла должно иметь тип boolean, получен {conditionType}",
                     0, 0,
                     "Используйте логическое выражение в условии цикла"
@@ -530,7 +530,7 @@ namespace PascalNET.Core
             // Проверяем, что это действительно процедура, а не функция
             if (function != null && !function.IsProcedure)
             {
-                _errorReporter.ReportSemanticError(
+                _messageFormatter.ReportSemanticError(
                     $"'{procedureCall.Name}' является функцией, а не процедурой. Используйте её в выражении",
                     0, 0,
                     "Функции должны использоваться в выражениях, а процедуры - как отдельные операторы"
@@ -605,7 +605,7 @@ namespace PascalNET.Core
                 var variable = kvp.Value;
                 if (!variable.IsUsed)
                 {
-                    _errorReporter.ReportWarning(
+                    _messageFormatter.ReportWarning(
                         $"Переменная '{variable.Name}' объявлена, но не используется",
                         variable.Line,
                         variable.Column,
@@ -622,7 +622,7 @@ namespace PascalNET.Core
                 var function = kvp.Value;
                 if (!function.IsUsed)
                 {
-                    _errorReporter.ReportWarning(
+                    _messageFormatter.ReportWarning(
                         $"{(function.IsProcedure ? "Процедура" : "Функция")} '{function.Name}' объявлена, но не используется",
                         function.Line,
                         function.Column,

@@ -1,4 +1,3 @@
-using PascalNET.Compiler;
 using PascalNET.Core;
 using PascalNET.Core.AST;
 using PascalNET.Core.Lexer;
@@ -9,11 +8,11 @@ namespace PascalNET
 {
     internal class IDE
     {
-        private readonly ErrorReporter _errorReporter;
+        private readonly ConsoleMessageFormatter _errorReporter;
 
         public IDE()
         {
-            _errorReporter = new ErrorReporter();
+            _errorReporter = new ConsoleMessageFormatter();
         }
 
         public ExecutionNode? Compile(string sourceCode)
@@ -24,7 +23,7 @@ namespace PascalNET
                 return null;
             }
 
-            ErrorReporter errorReporter = new(sourceCode);
+            ConsoleMessageFormatter errorReporter = new(sourceCode);
 
             try
             {
@@ -97,7 +96,7 @@ namespace PascalNET
         /// </summary>
         public void LexicAnalyze(string sourceCode)
         {
-            ErrorReporter errorReporter = new(sourceCode);
+            ConsoleMessageFormatter errorReporter = new(sourceCode);
             var lexer = new Lexer(sourceCode, errorReporter);
             var tokens = lexer.Tokenize();
 
@@ -116,12 +115,12 @@ namespace PascalNET
         /// </summary>
         public ExecutionNode? SyntaxAnalyze(string sourceCode)
         {
-            var lexer = new Lexer(sourceCode, new());
+            var lexer = new Lexer(sourceCode, new ConsoleMessageFormatter());
             var tokens = lexer.Tokenize();
 
             // Синтаксический анализ
-            var errorReporter = new ErrorReporter(sourceCode);
-            var parser = new Parser(tokens, errorReporter);
+            ConsoleMessageFormatter errorReporter = new(sourceCode);
+            Parser parser = new(tokens, errorReporter);
             var ast = parser.ParseProgram();
 
             Console.WriteLine("=== Результаты синтаксического анализа ===");
@@ -159,7 +158,7 @@ namespace PascalNET
 
         public CompilationReport GetCompilationReport(string sourceCode)
         {
-            ErrorReporter errorReporter = new(sourceCode);
+            ConsoleMessageFormatter errorReporter = new(sourceCode);
 
             Lexer lexer = new(sourceCode, errorReporter);
             var tokens = lexer.Tokenize();
@@ -173,16 +172,7 @@ namespace PascalNET
                 semanticAnalyzer.AnalyzeProgram(ast);
             }
 
-            return new CompilationReport
-            {
-                SourceCode = sourceCode,
-                TokenCount = tokens.Count,
-                AST = ast,
-                ErrorStatistics = errorReporter.GetErrorStatistics(),
-                HasErrors = errorReporter.HasErrors,
-                HasWarnings = errorReporter.HasWarnings,
-                CanExecute = !errorReporter.HasErrors
-            };
+            return new CompilationReport(sourceCode, tokens.Count, ast, errorReporter.GetErrorStatistics(), errorReporter.HasErrors, errorReporter.HasWarnings, errorReporter.HasErrors);
         }
     }
 
@@ -191,13 +181,30 @@ namespace PascalNET
     /// </summary>
     internal class CompilationReport
     {
-        public string SourceCode { get; set; } = "";
+        public string SourceCode { get; set; }
+
         public int TokenCount { get; set; }
+
         public ExecutionNode? AST { get; set; }
-        public Dictionary<string, int> ErrorStatistics { get; set; } = [];
+
+        public Dictionary<string, int> ErrorStatistics { get; set; }
+
         public bool HasErrors { get; set; }
+
         public bool HasWarnings { get; set; }
+
         public bool CanExecute { get; set; }
+
+        public CompilationReport(string sourceCode, int tokenCount, ExecutionNode? aST, Dictionary<string, int> errorStatistics, bool hasErrors, bool hasWarnings, bool canExecute)
+        {
+            SourceCode = sourceCode;
+            TokenCount = tokenCount;
+            AST = aST;
+            ErrorStatistics = errorStatistics;
+            HasErrors = hasErrors;
+            HasWarnings = hasWarnings;
+            CanExecute = canExecute;
+        }
 
         public void PrintSummary()
         {

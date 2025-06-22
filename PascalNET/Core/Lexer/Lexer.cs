@@ -1,5 +1,5 @@
-using PascalNET.Compiler;
 using PascalNET.Core.Lexer.Tokens;
+using PascalNET.Core.Messages;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -68,7 +68,7 @@ namespace PascalNET.Core.Lexer
 
         private readonly string _sourceCode;
 
-        private readonly ErrorReporter _errorReporter;
+        private readonly IMessageFormatter _messageFormatter;
 
         private int _position;
 
@@ -78,10 +78,10 @@ namespace PascalNET.Core.Lexer
 
         private int _startColumn;
 
-        public Lexer(string sourceCode, ErrorReporter errorReporter)
+        public Lexer(string sourceCode, IMessageFormatter messageFormatter)
         {
             _sourceCode = sourceCode;
-            _errorReporter = errorReporter;
+            _messageFormatter = messageFormatter;
             _position = 0;
             _line = 1;
             _column = 1;
@@ -114,7 +114,7 @@ namespace PascalNET.Core.Lexer
                     }
                     else
                     {
-                        _errorReporter.ReportLexicalError(
+                        _messageFormatter.ReportLexicalError(
                             $"Неожиданный символ '{problematicChar}'",
                             _line,
                             _column,
@@ -187,7 +187,7 @@ namespace PascalNET.Core.Lexer
 
             if (value.Length < 2)
             {
-                _errorReporter.ReportLexicalError(
+                _messageFormatter.ReportLexicalError(
                     "Незакрытая строковая константа",
                     token.Line,
                     token.Column,
@@ -199,7 +199,7 @@ namespace PascalNET.Core.Lexer
             char quote = value[0];
             if (value[^1] != quote)
             {
-                _errorReporter.ReportLexicalError(
+                _messageFormatter.ReportLexicalError(
                     "Незакрытая строковая константа",
                     token.Line,
                     token.Column,
@@ -210,7 +210,7 @@ namespace PascalNET.Core.Lexer
 
             if (value.Length > 257)
             {
-                _errorReporter.ReportWarning(
+                _messageFormatter.ReportWarning(
                     "Строковая константа слишком длинная (максимум 255 символов)",
                     token.Line,
                     token.Column,
@@ -225,7 +225,7 @@ namespace PascalNET.Core.Lexer
         {
             if (token.Value.Length > 63)
             {
-                _errorReporter.ReportWarning(
+                _messageFormatter.ReportWarning(
                     "Идентификатор слишком длинный (рекомендуется не более 63 символов)",
                     token.Line,
                     token.Column,
@@ -241,7 +241,7 @@ namespace PascalNET.Core.Lexer
             var value = token.Value;
             if (value.StartsWith("/*") && !value.EndsWith("*/"))
             {
-                _errorReporter.ReportLexicalError(
+                _messageFormatter.ReportLexicalError(
                     "Незакрытый блочный комментарий",
                     token.Line,
                     token.Column,
@@ -252,7 +252,7 @@ namespace PascalNET.Core.Lexer
 
             if (value.StartsWith('{') && !value.EndsWith('}'))
             {
-                _errorReporter.ReportLexicalError(
+                _messageFormatter.ReportLexicalError(
                     "Незакрытый комментарий",
                     token.Line,
                     token.Column,
@@ -306,7 +306,7 @@ namespace PascalNET.Core.Lexer
                 Move();
             }
 
-            _errorReporter.ReportLexicalError(
+            _messageFormatter.ReportLexicalError(
                 "Незакрытая строковая константа",
                 startLine,
                 startColumn,

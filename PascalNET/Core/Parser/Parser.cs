@@ -1,4 +1,3 @@
-using PascalNET.Compiler;
 using PascalNET.Core.AST;
 using PascalNET.Core.AST.BasicNodes;
 using PascalNET.Core.AST.Declartions;
@@ -6,6 +5,7 @@ using PascalNET.Core.AST.Expressions;
 using PascalNET.Core.AST.Nodes;
 using PascalNET.Core.AST.Statements;
 using PascalNET.Core.Lexer.Tokens;
+using PascalNET.Core.Messages;
 
 namespace PascalNET.Core.Parser
 {
@@ -13,7 +13,7 @@ namespace PascalNET.Core.Parser
     {
         private readonly List<Token> _tokens;
 
-        private readonly ErrorReporter _errorReporter;
+        private readonly IMessageFormatter _messageFormatter;
 
         private int _position;
 
@@ -21,10 +21,10 @@ namespace PascalNET.Core.Parser
 
         private bool _panicMode = false;
 
-        public Parser(List<Token> tokens, ErrorReporter errorReporter)
+        public Parser(List<Token> tokens, IMessageFormatter messageFormatter)
         {
             _tokens = tokens;
-            _errorReporter = errorReporter;
+            _messageFormatter = messageFormatter;
             _position = 0;
             _currentToken = tokens.Count > 0 ? tokens[0] : null;
         }
@@ -66,7 +66,7 @@ namespace PascalNET.Core.Parser
                     errorMessage = $"Ожидался {GetTokenDescription(expectedType)}, получен {GetTokenDescription(_currentToken?.Type ?? TokenType.Eof)}";
                 }
 
-                _errorReporter.ReportSyntaxError(
+                _messageFormatter.ReportSyntaxError(
                     errorMessage,
                     _currentToken,
                     GetSuggestionForExpectedToken(expectedType)
@@ -202,7 +202,7 @@ namespace PascalNET.Core.Parser
             }
             catch (Exception ex)
             {
-                _errorReporter.ReportSyntaxError(
+                _messageFormatter.ReportSyntaxError(
                     $"Критическая ошибка парсера: {ex.Message}",
                     _currentToken
                 );
@@ -210,7 +210,7 @@ namespace PascalNET.Core.Parser
             }
         }
 
-        private List<VariableDeclaration>? ParseVariableDeclarations()
+        private List<VariableDeclaration> ParseVariableDeclarations()
         {
             List<VariableDeclaration> declarations = [];
 
@@ -269,7 +269,7 @@ namespace PascalNET.Core.Parser
 
             if (!IsValidType(typeName))
             {
-                _errorReporter.ReportTypeError(
+                _messageFormatter.ReportTypeError(
                     $"Неизвестный тип '{typeName}'",
                     typeToken.Line,
                     typeToken.Column,
@@ -311,7 +311,7 @@ namespace PascalNET.Core.Parser
             }
             catch (Exception e)
             {
-                _errorReporter.ReportSyntaxError(
+                _messageFormatter.ReportSyntaxError(
                     "Ошибка при разборе оператора: " + e.ToString(),
                     _currentToken,
                     "Проверьте синтаксис оператора"
@@ -350,7 +350,7 @@ namespace PascalNET.Core.Parser
                 }
                 else if (!Match(TokenType.End))
                 {
-                    _errorReporter.ReportSyntaxError(
+                    _messageFormatter.ReportSyntaxError(
                         "Ожидается ';' между операторами",
                         _currentToken,
                         "Добавьте ';' после оператора"
@@ -415,7 +415,7 @@ namespace PascalNET.Core.Parser
             }
             else
             {
-                _errorReporter.ReportSyntaxError(
+                _messageFormatter.ReportSyntaxError(
                     $"После идентификатора '{identifierToken.Value}' ожидается ':=' или '('",
                     _currentToken,
                     "Используйте ':=' для присваивания или '()' для вызова процедуры"
@@ -670,7 +670,7 @@ namespace PascalNET.Core.Parser
                     return expression;
 
                 default:
-                    _errorReporter.ReportSyntaxError(
+                    _messageFormatter.ReportSyntaxError(
                         $"Неожиданный токен в выражении: {GetTokenDescription(_currentToken.Type)}",
                         _currentToken,
                         "Ожидается переменная, число, строка или выражение в скобках"
@@ -691,7 +691,7 @@ namespace PascalNET.Core.Parser
             {
                 // Пользовательские типы (пока не поддерживаются)
                 var token = _currentToken;
-                _errorReporter.ReportTypeError(
+                _messageFormatter.ReportTypeError(
                     $"Неизвестный тип '{token!.Value}'",
                     token.Line,
                     token.Column,
@@ -702,7 +702,7 @@ namespace PascalNET.Core.Parser
             }
             else
             {
-                _errorReporter.ReportSyntaxError(
+                _messageFormatter.ReportSyntaxError(
                     "Ожидается имя типа",
                     _currentToken,
                     "Используйте один из стандартных типов: integer, real, boolean, string"
@@ -761,10 +761,7 @@ namespace PascalNET.Core.Parser
             if (Match(TokenType.Var))
             {
                 var varDeclarations = ParseVariableDeclarations();
-                if (varDeclarations != null)
-                {
-                    localDeclarations.AddRange(varDeclarations);
-                }
+                localDeclarations.AddRange(varDeclarations);
             }
 
             var body = ParseStatement() ?? new CompoundStatement([]);

@@ -1,6 +1,6 @@
-﻿using PascalNET.Errors;
+﻿using PascalNET.Core.Messages;
 
-namespace PascalNET.Compiler.Messages.Errors
+namespace PascalNET.Core.Messages.Errors
 {
     internal class TypeError : CompilerError
     {

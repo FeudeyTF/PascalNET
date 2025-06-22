@@ -13,4 +13,8 @@
     <None Remove="Analyzers\**" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Compiler\" />
+  </ItemGroup>
+
 </Project>
