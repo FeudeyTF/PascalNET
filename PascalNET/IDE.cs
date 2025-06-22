@@ -1,9 +1,6 @@
 using PascalNET.Compiler;
 using PascalNET.Core;
 using PascalNET.Core.AST;
-using PascalNET.Core.AST.BasicNodes;
-using PascalNET.Core.AST.Declartions;
-using PascalNET.Core.AST.Statements;
 using PascalNET.Core.Lexer;
 using PascalNET.Core.Lexer.Tokens;
 using PascalNET.Core.Parser;
@@ -68,7 +65,9 @@ namespace PascalNET
 
                 if (!errorReporter.HasErrors && !errorReporter.HasWarnings)
                 {
-                    Console.WriteLine("✓ Компиляция завершена успешно!");
+                    if (ast != null)
+                        PrintAstStructure(ast);
+                    Console.WriteLine("Компиляция завершена успешно!");
                     Console.WriteLine("Программа не содержит ошибок и предупреждений.");
                 }
                 else
@@ -128,7 +127,7 @@ namespace PascalNET
             Console.WriteLine("=== Результаты синтаксического анализа ===");
             if (ast != null)
             {
-                PrintASTStructure(ast);
+                PrintAstStructure(ast);
             }
 
             if (errorReporter.HasErrors || errorReporter.HasWarnings)
@@ -140,9 +139,6 @@ namespace PascalNET
             return ast;
         }
 
-        /// <summary>
-        /// Выводит список токенов
-        /// </summary>
         private void PrintTokens(List<Token> tokens)
         {
             Console.WriteLine("Токены:");
@@ -152,81 +148,23 @@ namespace PascalNET
             }
         }
 
-        /// <summary>
-        /// Выводит структуру AST
-        /// </summary>
-        private void PrintASTStructure(ExecutionNode ast)
+        private void PrintAstStructure(ExecutionNode ast)
         {
-            Console.WriteLine("Структура программы:");
+            var visualizer = new AstVisualizer();
 
-            if (ast.Declarations.Any())
-            {
-                Console.WriteLine("  Объявления переменных:");
-                foreach (var declaration in ast.Declarations)
-                {
-                    if (declaration is VariableDeclaration variableDeclaration)
-                    {
-                        Console.WriteLine($"    {string.Join(", ", variableDeclaration.Identifiers)} : {variableDeclaration.TypeName}");
-                    }
-                }
-            }
+            Console.WriteLine(visualizer.VisualizeProgram(ast));
 
-            if (ast.Statement != null)
-            {
-                Console.WriteLine("  Основной блок операторов:");
-                PrintStatementStructure(ast.Statement, 2);
-            }
+            Console.WriteLine(visualizer.CreateSummary(ast));
         }
 
-        /// <summary>
-        /// Рекурсивно выводит структуру операторов
-        /// </summary>
-        private void PrintStatementStructure(IStatement statement, int indent)
-        {
-            var prefix = new string(' ', indent);
-
-            switch (statement)
-            {
-                case CompoundStatement compound:
-                    Console.WriteLine($"{prefix}Блок операторов ({compound.Statements.Count} операторов)");
-                    foreach (var stmt in compound.Statements)
-                    {
-                        PrintStatementStructure(stmt, indent + 2);
-                    }
-                    break;
-                case AssignmentStatement assignment:
-                    Console.WriteLine($"{prefix}Присваивание: {assignment.Variable} := ...");
-                    break;
-                case ConditionStatement condition:
-                    Console.WriteLine($"{prefix}Условный оператор (if-then-else)");
-                    PrintStatementStructure(condition.ThenStatement, indent + 2);
-                    if (condition.ElseStatement != null)
-                    {
-                        PrintStatementStructure(condition.ElseStatement, indent + 2);
-                    }
-                    break;
-                case CycleStatement cycle:
-                    Console.WriteLine($"{prefix}Цикл while");
-                    PrintStatementStructure(cycle.Statement, indent + 2);
-                    break;
-                default:
-                    Console.WriteLine($"{prefix}Оператор: {statement.GetType().Name}");
-                    break;
-            }
-        }
-
-        /// <summary>
-        /// Получает отчет о результатах компиляции
-        /// </summary>
         public CompilationReport GetCompilationReport(string sourceCode)
         {
-            var errorReporter = new ErrorReporter(sourceCode);
+            ErrorReporter errorReporter = new(sourceCode);
 
-            // Выполняем все этапы анализа
-            var lexer = new Lexer(sourceCode, errorReporter);
+            Lexer lexer = new(sourceCode, errorReporter);
             var tokens = lexer.Tokenize();
 
-            var parser = new Parser(tokens, errorReporter);
+            Parser parser = new(tokens, errorReporter);
             var ast = parser.ParseProgram();
 
             if (ast != null)

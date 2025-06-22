@@ -1,6 +1,6 @@
 ﻿using PascalNET.Core.AST.BasicNodes;
-using PascalNET.Core.AST.Nodes;
 using PascalNET.Core.AST.Declartions;
+using PascalNET.Core.AST.Nodes;
 
 namespace PascalNET.Core.AST
 {

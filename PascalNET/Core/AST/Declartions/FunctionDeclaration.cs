@@ -1,5 +1,5 @@
-using PascalNET.Core.AST.Nodes;
 using PascalNET.Core.AST.BasicNodes;
+using PascalNET.Core.AST.Nodes;
 
 namespace PascalNET.Core.AST.Declartions
 {
@@ -15,7 +15,7 @@ namespace PascalNET.Core.AST.Declartions
             TypeName = typeName;
         }
     }
-    
+
     internal class FunctionDeclaration : IDeclaration
     {
         public string Name { get; set; }
