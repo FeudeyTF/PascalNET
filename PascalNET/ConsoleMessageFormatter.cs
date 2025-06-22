@@ -116,7 +116,7 @@ namespace PascalNET
             Console.ForegroundColor = message.GetColor();
             Console.Write(type + " ");
             Console.ResetColor();
-            Console.WriteLine($"{message.Message} ({message.Line}, {message.Column}). {message.Suggestion} {message.GetType().Name}");
+            Console.WriteLine($"{message.Message} ({message.Line}, {message.Column}). {message.Suggestion}");
 
             if (!string.IsNullOrEmpty(message.SourceFragment))
             {
